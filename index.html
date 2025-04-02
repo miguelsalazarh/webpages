@@ -3,53 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor RV con Sensor de Movimiento</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@webxr-polyfill/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
+    <title>Detección de Profundidad</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/depth-estimation"></script>
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        video, canvas {
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            margin: 10px;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
 <body>
+    <h1>Calculadora de Profundidad</h1>
+    <video id="video" autoplay playsinline width="320" height="240"></video>
+    <canvas id="depthCanvas" width="320" height="240"></canvas>
+    <button onclick="calcularProfundidad()">Calcular Profundidad</button>
     <script>
-        let scene, camera, renderer, object;
-
-        function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 2;
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(5, 5, 5).normalize();
-            scene.add(light);
-
-            const geometry = new THREE.TorusKnotGeometry(0.4, 0.15, 100, 16);
-            const material = new THREE.MeshStandardMaterial({ color: 0x0077ff, metalness: 0.5, roughness: 0.2 });
-            object = new THREE.Mesh(geometry, material);
-            scene.add(object);
-
-            window.addEventListener('deviceorientation', handleOrientation, true);
-            animate();
+        async function iniciarCamara() {
+            const video = document.getElementById('video');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error("Error al acceder a la cámara: ", error);
+            }
         }
 
-        function handleOrientation(event) {
-            let gamma = event.gamma * (Math.PI / 180);
-            let beta = event.beta * (Math.PI / 180);
-            object.rotation.y = gamma;
-            object.rotation.x = beta;
+        async function calcularProfundidad() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('depthCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const model = await depthEstimation.load();
+            const depthMap = await model.estimateDepth(video);
+            const depthData = depthMap.dataSync();
+            
+            const imageData = new ImageData(new Uint8ClampedArray(depthData), canvas.width, canvas.height);
+            ctx.putImageData(imageData, 0, 0);
         }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-
-        init();
+        
+        window.onload = iniciarCamara;
     </script>
 </body>
 </html>
