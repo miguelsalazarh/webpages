@@ -3,71 +3,600 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Detección de Profundidad</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/depth-estimation"></script>
+    <title>Space Blaster</title>
     <style>
         body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            color: white;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 600px;
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            background-color: #000;
+            display: block;
+        }
+        
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #00ffff;
+        }
+        
+        #health-bar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            border: 1px solid #00ffff;
+            overflow: hidden;
+        }
+        
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(to right, #ff0000, #00ff00);
+            transition: width 0.3s;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            height: 100vh;
-            background-color: #222;
-            color: white;
-            font-family: Arial, sans-serif;
+            align-items: center;
+            z-index: 10;
         }
-        video, canvas {
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            margin: 10px;
+        
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
         }
-        button {
-            background-color: #28a745;
-            color: white;
+        
+        .title {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #00ffff;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.7);
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            margin-bottom: 30px;
+            color: #aaa;
+        }
+        
+        .btn {
+            padding: 10px 30px;
+            font-size: 18px;
+            background: linear-gradient(to right, #00aaaa, #0088ff);
             border: none;
-            padding: 10px 20px;
             border-radius: 5px;
+            color: white;
             cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
+            pointer-events: auto;
+            transition: all 0.3s;
         }
-        button:hover {
-            background-color: #218838;
+        
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(0, 200, 255, 0.7);
+        }
+        
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        
+        .mobile-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            border: 2px solid #00ffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            pointer-events: auto;
+            touch-action: manipulation;
+        }
+        
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+            }
+            
+            .title {
+                font-size: 36px;
+            }
+        }
+        
+        .explosion {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, rgba(255,200,0,0.8) 0%, rgba(255,100,0,0.8) 50%, rgba(255,0,0,0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: scale(0);
+            opacity: 1;
         }
     </style>
 </head>
 <body>
-    <h1>Calculadora de Profundidad</h1>
-    <video id="video" autoplay playsinline width="320" height="240"></video>
-    <canvas id="depthCanvas" width="320" height="240"></canvas>
-    <button onclick="calcularProfundidad()">Calcular Profundidad</button>
-    <script>
-        async function iniciarCamara() {
-            const video = document.getElementById('video');
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
-            } catch (error) {
-                console.error("Error al acceder a la cámara: ", error);
-            }
-        }
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div id="score-display">Puntuación: 0</div>
+            <div id="health-bar">
+                <div id="health-fill"></div>
+            </div>
+            <div id="mobile-controls">
+                <div class="mobile-btn" id="left-btn">←</div>
+                <div class="mobile-btn" id="shoot-btn">🔫</div>
+                <div class="mobile-btn" id="right-btn">→</div>
+            </div>
+        </div>
+        
+        <div id="start-screen">
+            <h1 class="title">SPACE BLASTER</h1>
+            <p class="subtitle">Destruye los enemigos antes de que te alcancen</p>
+            <button class="btn" id="start-btn">COMENZAR</button>
+        </div>
+        
+        <div id="game-over-screen">
+            <h1 class="title">GAME OVER</h1>
+            <p class="subtitle" id="final-score">Puntuación: 0</p>
+            <button class="btn" id="restart-btn">REINTENTAR</button>
+        </div>
+    </div>
 
-        async function calcularProfundidad() {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('depthCanvas');
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    <script>
+        // Configuración del juego
+        const config = {
+            playerSpeed: 5,
+            bulletSpeed: 7,
+            enemySpeed: 2,
+            enemySpawnRate: 1000,
+            playerSize: 30,
+            bulletSize: 5,
+            enemySize: 25,
+            maxHealth: 100,
+            damagePerHit: 10
+        };
+        
+        // Estado del juego
+        const gameState = {
+            score: 0,
+            health: config.maxHealth,
+            isRunning: false,
+            playerX: 400,
+            enemies: [],
+            bullets: [],
+            explosions: [],
+            keys: {
+                ArrowLeft: false,
+                ArrowRight: false,
+                Space: false
+            },
+            lastEnemySpawn: 0,
+            animationId: null
+        };
+        
+        // Elementos del DOM
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const healthFill = document.getElementById('health-fill');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const leftBtn = document.getElementById('left-btn');
+        const rightBtn = document.getElementById('right-btn');
+        const shootBtn = document.getElementById('shoot-btn');
+        
+        // Inicializar el juego
+        function initGame() {
+            // Configurar tamaño del canvas
+            canvas.width = 800;
+            canvas.height = 600;
             
-            const model = await depthEstimation.load();
-            const depthMap = await model.estimateDepth(video);
-            const depthData = depthMap.dataSync();
+            // Eventos de teclado
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'ArrowLeft') gameState.keys.ArrowLeft = true;
+                if (e.code === 'ArrowRight') gameState.keys.ArrowRight = true;
+                if (e.code === 'Space') gameState.keys.Space = true;
+            });
             
-            const imageData = new ImageData(new Uint8ClampedArray(depthData), canvas.width, canvas.height);
-            ctx.putImageData(imageData, 0, 0);
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'ArrowLeft') gameState.keys.ArrowLeft = false;
+                if (e.code === 'ArrowRight') gameState.keys.ArrowRight = false;
+                if (e.code === 'Space') gameState.keys.Space = false;
+            });
+            
+            // Eventos de botones móviles
+            leftBtn.addEventListener('touchstart', () => gameState.keys.ArrowLeft = true);
+            leftBtn.addEventListener('touchend', () => gameState.keys.ArrowLeft = false);
+            rightBtn.addEventListener('touchstart', () => gameState.keys.ArrowRight = true);
+            rightBtn.addEventListener('touchend', () => gameState.keys.ArrowRight = false);
+            shootBtn.addEventListener('touchstart', () => gameState.keys.Space = true);
+            shootBtn.addEventListener('touchend', () => gameState.keys.Space = false);
+            
+            // Eventos de botones
+            startBtn.addEventListener('click', startGame);
+            restartBtn.addEventListener('click', restartGame);
         }
         
-        window.onload = iniciarCamara;
+        // Comenzar juego
+        function startGame() {
+            resetGame();
+            startScreen.style.display = 'none';
+            gameState.isRunning = true;
+            gameLoop();
+        }
+        
+        // Reiniciar juego
+        function restartGame() {
+            resetGame();
+            gameOverScreen.style.display = 'none';
+            gameState.isRunning = true;
+            gameLoop();
+        }
+        
+        // Resetear estado del juego
+        function resetGame() {
+            gameState.score = 0;
+            gameState.health = config.maxHealth;
+            gameState.playerX = canvas.width / 2;
+            gameState.enemies = [];
+            gameState.bullets = [];
+            gameState.explosions = [];
+            gameState.lastEnemySpawn = 0;
+            
+            updateUI();
+        }
+        
+        // Bucle principal del juego
+        function gameLoop(timestamp) {
+            if (!gameState.isRunning) return;
+            
+            update(timestamp);
+            render();
+            
+            gameState.animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        // Actualizar estado del juego
+        function update(timestamp) {
+            // Mover jugador
+            if (gameState.keys.ArrowLeft && gameState.playerX > config.playerSize / 2) {
+                gameState.playerX -= config.playerSpeed;
+            }
+            if (gameState.keys.ArrowRight && gameState.playerX < canvas.width - config.playerSize / 2) {
+                gameState.playerX += config.playerSpeed;
+            }
+            
+            // Disparar
+            if (gameState.keys.Space) {
+                shoot();
+                gameState.keys.Space = false;
+            }
+            
+            // Generar enemigos
+            if (timestamp - gameState.lastEnemySpawn > config.enemySpawnRate) {
+                spawnEnemy();
+                gameState.lastEnemySpawn = timestamp;
+                
+                // Aumentar dificultad
+                if (gameState.score > 0 && gameState.score % 10 === 0) {
+                    config.enemySpeed += 0.1;
+                    config.enemySpawnRate = Math.max(500, config.enemySpawnRate - 50);
+                }
+            }
+            
+            // Mover balas
+            gameState.bullets.forEach(bullet => {
+                bullet.y -= config.bulletSpeed;
+            });
+            
+            // Mover enemigos
+            gameState.enemies.forEach(enemy => {
+                enemy.y += config.enemySpeed;
+            });
+            
+            // Actualizar explosiones
+            gameState.explosions.forEach(explosion => {
+                explosion.time += 16;
+            });
+            
+            // Eliminar balas fuera de pantalla
+            gameState.bullets = gameState.bullets.filter(bullet => bullet.y > -config.bulletSize);
+            
+            // Eliminar enemigos fuera de pantalla
+            gameState.enemies = gameState.enemies.filter(enemy => enemy.y < canvas.height + config.enemySize);
+            
+            // Eliminar explosiones completadas
+            gameState.explosions = gameState.explosions.filter(explosion => explosion.time < 500);
+            
+            // Detectar colisiones bala-enemigo
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                
+                for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+                    const enemy = gameState.enemies[j];
+                    
+                    if (checkCollision(bullet, enemy)) {
+                        // Crear explosión
+                        createExplosion(enemy.x, enemy.y);
+                        
+                        // Eliminar bala y enemigo
+                        gameState.bullets.splice(i, 1);
+                        gameState.enemies.splice(j, 1);
+                        
+                        // Aumentar puntuación
+                        gameState.score += 1;
+                        updateUI();
+                        break;
+                    }
+                }
+            }
+            
+            // Detectar colisiones jugador-enemigo
+            const player = {
+                x: gameState.playerX,
+                y: canvas.height - config.playerSize,
+                size: config.playerSize
+            };
+            
+            for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                const enemy = gameState.enemies[i];
+                
+                if (checkCollision(player, enemy)) {
+                    // Crear explosión
+                    createExplosion(enemy.x, enemy.y);
+                    
+                    // Eliminar enemigo
+                    gameState.enemies.splice(i, 1);
+                    
+                    // Reducir salud
+                    gameState.health -= config.damagePerHit;
+                    updateUI();
+                    
+                    // Verificar game over
+                    if (gameState.health <= 0) {
+                        gameOver();
+                    }
+                    break;
+                }
+            }
+        }
+        
+        // Dibujar elementos del juego
+        function render() {
+            // Limpiar canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar fondo estrellado
+            drawStarfield();
+            
+            // Dibujar jugador
+            drawPlayer();
+            
+            // Dibujar enemigos
+            gameState.enemies.forEach(enemy => {
+                drawEnemy(enemy);
+            });
+            
+            // Dibujar balas
+            gameState.bullets.forEach(bullet => {
+                drawBullet(bullet);
+            });
+            
+            // Dibujar explosiones
+            gameState.explosions.forEach(explosion => {
+                drawExplosion(explosion);
+            });
+        }
+        
+        // Dibujar fondo estrellado
+        function drawStarfield() {
+            ctx.fillStyle = 'white';
+            
+            // Estrellas estáticas
+            for (let i = 0; i < 100; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const size = Math.random() * 2;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Dibujar jugador
+        function drawPlayer() {
+            const y = canvas.height - config.playerSize;
+            
+            // Nave espacial
+            ctx.fillStyle = '#00ffff';
+            ctx.beginPath();
+            ctx.moveTo(gameState.playerX, y - config.playerSize / 2);
+            ctx.lineTo(gameState.playerX + config.playerSize / 2, y + config.playerSize / 2);
+            ctx.lineTo(gameState.playerX - config.playerSize / 2, y + config.playerSize / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Motor
+            ctx.fillStyle = '#ff5500';
+            ctx.beginPath();
+            ctx.moveTo(gameState.playerX - config.playerSize / 4, y + config.playerSize / 2);
+            ctx.lineTo(gameState.playerX, y + config.playerSize / 2 + 10);
+            ctx.lineTo(gameState.playerX + config.playerSize / 4, y + config.playerSize / 2);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        
+        function drawEnemy(enemy) {
+            ctx.fillStyle = '#ff00ff';
+            ctx.beginPath();
+            ctx.moveTo(enemy.x, enemy.y + config.enemySize / 2);
+            ctx.lineTo(enemy.x + config.enemySize / 2, enemy.y - config.enemySize / 2);
+            ctx.lineTo(enemy.x - config.enemySize / 2, enemy.y - config.enemySize / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+           
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(enemy.x - config.enemySize / 4, enemy.y - config.enemySize / 4, 3, 0, Math.PI * 2);
+            ctx.arc(enemy.x + config.enemySize / 4, enemy.y - config.enemySize / 4, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        
+        function drawBullet(bullet) {
+            ctx.fillStyle = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, config.bulletSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        
+        function drawExplosion(explosion) {
+            const progress = explosion.time / 500;
+            const size = progress * 50;
+            const alpha = 1 - progress;
+            
+            ctx.fillStyle = `rgba(255, ${200 - progress * 100}, 0, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(explosion.x, explosion.y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        
+        function spawnEnemy() {
+            const x = Math.random() * (canvas.width - config.enemySize) + config.enemySize / 2;
+            const y = -config.enemySize;
+            
+            gameState.enemies.push({
+                x,
+                y,
+                size: config.enemySize
+            });
+        }
+        
+      
+        function createExplosion(x, y) {
+            gameState.explosions.push({
+                x,
+                y,
+                time: 0
+            });
+        }
+        
+        // Disparar bala
+        function shoot() {
+            gameState.bullets.push({
+                x: gameState.playerX,
+                y: canvas.height - config.playerSize - config.bulletSize,
+                size: config.bulletSize
+            });
+        }
+        
+        // Verificar colisión
+        function checkCollision(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            return distance < (obj1.size / 2 + obj2.size / 2);
+        }
+        
+        // Actualizar UI
+        function updateUI() {
+            scoreDisplay.textContent = `Puntuación: ${gameState.score}`;
+            healthFill.style.width = `${(gameState.health / config.maxHealth) * 100}%`;
+            
+            // Cambiar color de la barra de salud
+            if (gameState.health < 30) {
+                healthFill.style.background = '#ff0000';
+            } else if (gameState.health < 60) {
+                healthFill.style.background = '#ff9900';
+            } else {
+                healthFill.style.background = '#00ff00';
+            }
+        }
+        
+        // Game over
+        function gameOver() {
+            gameState.isRunning = false;
+            cancelAnimationFrame(gameState.animationId);
+            
+            finalScoreDisplay.textContent = `Puntuación final: ${gameState.score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Inicializar el juego cuando se cargue la página
+        window.addEventListener('load', initGame);
     </script>
 </body>
 </html>
